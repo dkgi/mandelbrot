@@ -15,21 +15,21 @@ namespace MB {
 			  *
 			  * @param width The width
 			  * @param height The height
-			  * @param lod The level of detail
+			  * @param sampleSize The level of detail
 			  */
-			Sampler(int width, int height, int lod)
+			Sampler(int width, int height, int sampleSize)
 			{
-				m_width = width / lod;
-				m_height = height / lod;
-				m_lod = lod;
+				m_width = width / sampleSize; // TODO one-off error
+				m_height = height / sampleSize;
+				m_sampleSize = sampleSize;
 
 				m_samples.resize(m_width * m_height);
 
 				for (int i = 0; i < m_width; i++) {
 					for (int j = 0; j < m_height; j++) {
-						m_samples[j*m_width+i].screen.x = i*m_lod;
-						m_samples[j*m_width+i].screen.y = j*m_lod;
-						m_samples[j*m_width+i].size = m_lod;
+						m_samples[j*m_width+i].screen.x = i*m_sampleSize;
+						m_samples[j*m_width+i].screen.y = j*m_sampleSize;
+						m_samples[j*m_width+i].size = m_sampleSize;
 					}
 				}
 			}
@@ -65,7 +65,7 @@ namespace MB {
 		private:
 			int m_width;
 			int m_height;
-			int m_lod;
+			int m_sampleSize;
 
 			std::vector<Sample> m_samples;
 

@@ -38,7 +38,9 @@ pthread_mutex_t m_versionLock = PTHREAD_MUTEX_INITIALIZER;
 /**
   * The size of the currently displayed samples.
   */
-int m_lod = 20;
+int m_minSampleSize = 1;
+int m_maxSampleSize = 40;
+int m_sampleSize = m_maxSampleSize;
 
 
 /**
@@ -47,11 +49,9 @@ int m_lod = 20;
 void replaceBuffer(Buffer *buffer)
 {
 	pthread_mutex_lock(&m_bufferLock);
-	{
-		Buffer *tmp = m_buffer;
-		m_buffer = buffer;
-		delete tmp;
-	}
+	Buffer *tmp = m_buffer;
+	m_buffer = buffer;
+	delete tmp;
 	pthread_mutex_unlock(&m_bufferLock);
 }
 
@@ -65,7 +65,7 @@ Viewport *m_viewport = new Viewport();
 /**
   * The scene
   */
-Scene *m_scene = new Scene();
+Scene *m_scene = new Mandelbrot();
 
 
 /**
@@ -123,7 +123,7 @@ struct timeval then, now;
 /**
   * The main loop processes events.
   */
-void loop()
+void processEvents()
 {
 	gettimeofday(&now, NULL);
 	long ds = now.tv_sec - then.tv_sec;
@@ -132,6 +132,10 @@ void loop()
 	framesPerSecond = 1.0 / iterationDt;
 	then = now;
 
+	// General control
+	if (keyPressed[27]) exit(0);
+
+	// Movement (TODO: NE, SE, etc.)
 	direction dm = NONE;
 	if (keyPressed['w']) dm = UP;
 	if (keyPressed['s']) dm = DOWN;
@@ -147,16 +151,21 @@ void loop()
 	if (dm != NONE || dz != NONE) {
 		pthread_mutex_lock(&m_versionLock);
 		m_version++;
+		m_sampleSize = m_maxSampleSize;
+		pthread_mutex_unlock(&m_versionLock);
+	} else if (m_sampleSize == m_maxSampleSize) {
+		pthread_mutex_lock(&m_versionLock);
+		m_version++;
+		m_sampleSize = m_minSampleSize;
 		pthread_mutex_unlock(&m_versionLock);
 	}
-
 }
 
 
 /**
   * The main loop of the computing thread.
   */
-void *dispatch(void *data) 
+void *computeScene(void *data) 
 {
 	int version = -1;
 
@@ -168,9 +177,10 @@ void *dispatch(void *data)
 		version = m_version;	
 		pthread_mutex_unlock(&m_versionLock);
 
-		Sampler sampler(buffer->width(), buffer->height(), m_lod);
+		Sampler sampler(buffer->width(), buffer->height(), m_sampleSize);
 		std::vector<Sample>::iterator it;
 
+		// TODO parallelize further
 		for (it = sampler.begin(); it != sampler.end(); it++) {
 			if (m_version != version) break;						// Early abort
 
@@ -197,12 +207,6 @@ void *dispatch(void *data)
 void keyboard(unsigned char key, int x, int y)
 {
 	keyPressed[key] = true;
-
-	switch(key) {
-		case 27:
-			exit(0);
-			break;
-	}
 }
 
 
@@ -220,9 +224,9 @@ void init()
 	glClearColor(0.0, 0.0, 0.0, 0.0);
 	gettimeofday(&then, NULL);
 
-	pthread_t dispatchId;
-	if (pthread_create(&dispatchId, NULL, dispatch, NULL) != 0) {
-		std::cerr << "Could not launch dispatcher." << std::endl;
+	pthread_t threadId;
+	if (pthread_create(&threadId, NULL, computeScene, NULL) != 0) {
+		std::cerr << "Could not launch scene thread." << std::endl;
 		exit(1);
 	}
 }
@@ -243,7 +247,7 @@ int main(int argc, char *argv[])
 
 	glutDisplayFunc(display);
 	glutReshapeFunc(reshape);
-	glutIdleFunc(loop);
+	glutIdleFunc(processEvents);
 	glutKeyboardFunc(keyboard);
 	glutKeyboardUpFunc(keyboardUp);
 
